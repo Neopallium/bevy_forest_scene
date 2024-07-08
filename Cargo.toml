@@ -3,8 +3,13 @@ name = "bevy_forest_scene"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+
+inspector = [ "bevy-inspector-egui" ]
+
 [dependencies]
-bevy = { git = "https://github.com/bevyengine/bevy.git", default-features = false, features = [
+bevy = { version = "0.14", features = [
     "bevy_gltf",
     "bevy_pbr",
     "jpeg",
@@ -17,6 +22,9 @@ bevy = { git = "https://github.com/bevyengine/bevy.git", default-features = fals
 ] }
 noise = "0.9.0"
 rand = "0.8.5"
+bevy_water = { version = "0.14.2", features = ["ssr"] }
+
+bevy-inspector-egui = { version = "0.25", optional = true }
 
 [profile.dev.package."*"]
 opt-level = 3

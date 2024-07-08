@@ -4,7 +4,6 @@ use bevy::{
     color::palettes::css::WHITE,
     core_pipeline::{
         dof::DepthOfFieldSettings,
-        experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin},
         motion_blur::MotionBlur,
         prepass::{DeferredPrepass, DepthPrepass},
         tonemapping::Tonemapping,
@@ -16,36 +15,51 @@ use bevy::{
         ScreenSpaceReflectionsSettings, VolumetricFogSettings, VolumetricLight,
     },
     prelude::*,
-    render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
+    render::view::{ColorGrading, ColorGradingSection},
     tasks::IoTaskPool,
 };
 use camera_controller::CameraController;
 use terrain::{TerrainConfig, TerrainMaterial, TerrainResources};
-use water::FoamMaterial;
+use ships::*;
+
+use bevy_water::*;
 
 mod camera_controller;
 mod plane;
 mod terrain;
-mod water;
+mod ships;
+
+const WATER_HEIGHT: f32 = 0.0;
 
 fn main() {
-    App::new()
+    let mut app = App::new();
+
+    app
         .insert_resource(Msaa::Off)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
-                    resolution: (1920.0, 1080.0).into(),
+                    resolution: (1200.0, 600.0).into(),
                     ..default()
                 }),
                 ..default()
             }),
-            TemporalAntiAliasPlugin,
             WireframePlugin,
-            MaterialPlugin::<FoamMaterial>::default(),
-            MaterialPlugin::<ExtendedMaterial<StandardMaterial, water::Water>>::default(),
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, TerrainMaterial>>::default(),
-        ))
+            WaterPlugin,
+        ));
+
+    #[cfg(feature = "inspector")]
+    app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
+
+
+    app
+        .insert_resource(WaterSettings {
+          height: WATER_HEIGHT,
+          amplitude: 0.4,
+          ..default()
+        })
         .insert_resource(WireframeConfig {
             global: false,
             ..default()
@@ -61,10 +75,11 @@ fn main() {
             (
                 spawn_camera,
                 terrain::setup_terrain_resources,
-                water::spawn_water,
                 // save_scene_system,
                 terrain::load_terrain_config,
                 load_scene_config,
+                // Spawn some ships.
+                spawn_ships,
             ),
         )
         .add_systems(
@@ -81,9 +96,12 @@ fn main() {
                     resource_exists::<TerrainResources>.and_then(resource_exists::<TerrainConfig>),
                 ),
                 on_scene_config_loaded.run_if(resource_exists_and_changed::<SceneConfig>),
+                // Ship Physics.
+                update_ships,
             ),
-        )
-        .run();
+        );
+
+    app.run();
 }
 
 #[derive(Resource, Reflect)]
@@ -154,8 +172,7 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
             DepthOfFieldSettings::default(),
             MotionBlur::default(),
         ))
-        .insert(Tonemapping::AcesFitted)
-        .insert(TemporalAntiAliasBundle::default());
+        .insert(Tonemapping::AcesFitted);
 
     commands.spawn((
         DirectionalLightBundle {
